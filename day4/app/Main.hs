@@ -3,7 +3,7 @@
 module Main (main) where
 
 import Data.List (maximumBy, nub, sort, sortBy, (!?))
-import Data.Maybe (mapMaybe)
+import Data.Maybe (fromMaybe, mapMaybe, listToMaybe)
 import Data.Ord (Down (Down), comparing)
 import Debug.Trace (trace)
 
@@ -20,78 +20,48 @@ main = do
   expect (part2 test) 43
   print (part2 input)
 
-data Cell = Empty | PaperRoll
-  deriving (Eq)
-
-parse :: String -> ([Cell], (Int, Int))
+parse :: String -> [[Int]]
 parse txt =
   let grid =
         map
           ( map
               ( \case
-                  '.' -> Empty
-                  '@' -> PaperRoll
+                  '.' -> 0
+                  '@' -> 1
                   _ -> error "Got some weird character"
               )
           )
           $ lines txt
-      w = length grid
-      h =
-        ( case grid of
-            [] -> 0
-            (x : _) -> length x
-        )
-   in (concat grid, (w, h))
+   in grid
 
-kernel x (w, h)
-  | x `mod` w == 0 =
-      [ x + 1,
-        x - w,
-        x - w + 1,
-        x + w,
-        x + w + 1
-      ]
-  | x `mod` w == w - 1 =
-      [ x - 1,
-        x - w,
-        x - w - 1,
-        x + w,
-        x + w - 1
-      ]
-  | otherwise =
-      [ x - 1,
-        x + 1,
-        x - w,
-        x - w - 1,
-        x - w + 1,
-        x + w,
-        x + w - 1,
-        x + w + 1
-      ]
+pickup a [b, x, c] d = if x == 0 then (0, 0) else let s = sum a + b + c + sum d in if s < 4 then (1, 0) else (0, x)
 
-findSpots grid size =
-  let (spots, grid') = unzip $ zipWith go [0 ..] grid
-   in (sum spots, grid')
+triples (a : b : c : xs) = [a, b, c] : triples (b: c : xs)
+triples _ = []
+
+findSpots :: [[Int]] -> (Int, [[Int]])
+findSpots grid = go [] 0 (length grid - 1)
   where
-    go i x =
-      if x == Empty
-        then (0, Empty)
-        else case filter ((Just PaperRoll ==) . (grid !?)) (kernel i size) of
-          (_1 : _2 : _3 : _4 : _) -> (0, PaperRoll)
-          _ -> (1, Empty)
+    emptyRow = repeat 0
+    go :: [[Int]] -> Int -> Int -> (Int, [[Int]])
+    go grid' acc (-1) = (acc, grid')
+    go grid' acc n =
+      -- We pad the whole grid with 0s so that it's easier to move the window through it
+      let top = 0 : fromMaybe emptyRow (grid !? (n - 1)) ++ [0]
+          middle = 0 : fromMaybe emptyRow (grid !? n) ++ [0]
+          bottom = 0 : fromMaybe emptyRow (grid !? (n + 1)) ++ [0]
+          (rolls, row) = unzip $ zipWith3 pickup (triples top) (triples middle) (triples bottom)
+       in go (row : grid') (sum rolls + acc) (n - 1)
 
 part1 :: String -> Int
 part1 txt =
-  let (grid, size) = parse txt
-   in fst $ findSpots grid size
+  let grid = parse txt
+   in fst $ findSpots grid
 
 part2 :: String -> Int
 part2 txt =
-  let (grid, size) = parse txt
-   in go 0 grid size
-  where
-    go acc grid size =
-      let (empty, grid') = findSpots grid size
-       in case empty of
-            0 -> acc
-            n -> go (acc + n) grid' size
+  let grid = parse txt
+   in sum $
+        map fst $
+          takeWhile (\(x, _) -> x /= 0) $
+            iterate (\(_, grid) -> findSpots grid) (findSpots grid)
