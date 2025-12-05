@@ -1,11 +1,10 @@
 module Main (main) where
 
-import Data.Bifunctor (bimap)
-import Data.List (isPrefixOf, maximumBy, nub, sort, sortBy, (!?))
-import Data.Maybe (fromMaybe, listToMaybe, mapMaybe)
-import Data.Ord (Down (Down), comparing)
-import Debug.Trace (trace)
+import Data.List (sortOn)
 
+type Range = (Int, Int)
+
+expect :: (Eq a, Show a, Applicative f) => a -> a -> f ()
 expect a b
   | a == b = pure ()
   | otherwise = error ("Expected " ++ show a ++ " to equal " ++ show b)
@@ -19,58 +18,33 @@ main = do
   expect (part2 test) 14
   print (part2 input)
 
-split :: (Eq a) => a -> [a] -> ([a], [a])
-split q xs = go [] q xs
-  where
-    go left q w@(x : xs) = if q == x then (reverse left, xs) else go (x : left) q xs
-    go left _ [] = (reverse left, [])
-
-parse :: String -> ([(Int, Int)], [Int])
+parse :: String -> ([Range], [Int])
 parse txt =
-  let (rawRanges, rawInstructions) = split [] (lines txt)
-      ranges = map (bimap read read . split '-') rawRanges
-      instructions = map read rawInstructions
+  let (rawRanges, rest) = break null (lines txt)
+      toRange (left, '-' : right) = (read left, read right)
+      toRange _ = error "Invalid range"
+      ranges = map (toRange . break (== '-')) rawRanges
+      instructions = map read (drop 1 rest)
    in (ranges, instructions)
+
+inRange :: Range -> Int -> Bool
+inRange (a, b) x = a <= x && x <= b
 
 part1 :: String -> Int
 part1 txt =
   let (ranges, ingredients) = parse txt
-      isInRange x = any (\(a, b) -> x >= a && x <= b) ranges
-   in length $ filter isInRange ingredients
+   in length $ filter (\x -> any (`inRange` x) ranges) ingredients
 
-data Collision = Split Int Int | LowerTo Int | RaiseTo Int | Remove
-  deriving (Show)
+merge :: [Range] -> [Range]
+merge = foldl' step [] . sortOn fst
+  where
+    step [] r = [r]
+    step acc@((l, h) : rs) (a, b)
+      | a <= h + 1 = (l, max h b) : rs
+      | otherwise = (a, b) : acc
 
 part2 :: String -> Int
 part2 txt =
   let (ranges, _) = parse txt
-      uniq = foldl' go [] ranges
+      uniq = merge ranges
    in sum $ map (\(a, b) -> b - a + 1) uniq
-  where
-    go acc (a, b) =
-      let collision =
-            listToMaybe $
-              mapMaybe
-                ( \(x, y) ->
-                    let bottomIn = x >= a && x <= b
-                        topIn = y >= a && y <= b
-                     in if bottomIn && topIn
-                          then Just (Split (x - 1) (y + 1))
-                          else
-                            if bottomIn
-                              then Just (LowerTo (x - 1))
-                              else
-                                if topIn
-                                  then Just (RaiseTo (y + 1))
-                                  else
-                                    if a >= x && b <= y
-                                      then Just Remove
-                                      else Nothing
-                )
-                acc
-       in case trace (show collision) collision of
-            Just (LowerTo x) -> go acc (a, x)
-            Just (RaiseTo y) -> go acc (y, b)
-            Just (Split x y) -> go (go acc (a, x)) (y, b)
-            Just Remove -> acc
-            Nothing -> (a, b) : acc
