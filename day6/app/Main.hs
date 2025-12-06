@@ -1,9 +1,6 @@
 module Main (main) where
 
-import Data.List (sortOn, transpose)
-import Debug.Trace (trace)
-
-type Range = (Int, Int)
+import Data.List (transpose)
 
 expect :: (Eq a, Show a, Applicative f) => a -> a -> f ()
 expect a b
@@ -21,42 +18,41 @@ main = do
 
 data Problem = Problem (Int -> Int -> Int) [Int]
 
+parseOp :: String -> (Int -> Int -> Int)
 parseOp "*" = (*)
 parseOp "+" = (+)
+parseOp op = error ("Unknown operator: " ++ op)
 
-parse :: String -> [Problem]
-parse = map problem . transpose . map words . lines
+solve :: [Problem] -> Int
+solve = sum . map (\(Problem op xs) -> foldl1 op xs)
+
+parse1 :: String -> [Problem]
+parse1 = map toProblem . transpose . map words . lines
   where
-    problem xs = case reverse xs of
-      (x : xs) -> Problem (parseOp x) (map read xs)
+    toProblem col = case reverse col of
+      rawOp : nums -> Problem (parseOp rawOp) (map read nums)
+      _ -> error "Empty column encountered while parsing"
 
 part1 :: String -> Int
-part1 txt =
-  let problems = parse txt
-      solve = map $ \(Problem op is) -> foldl1 op is
-   in sum $ solve problems
+part1 = solve . parse1
 
-split :: [String] -> [[String]]
-split = go [] []
+splitColumns :: [String] -> [[String]]
+splitColumns = go [] []
   where
-    go acc c [] = reverse (reverse c : acc)
-    go acc c (x : xs) = if filter (/= ' ') x == "" then go (reverse c : acc) [] xs else go acc (x : c) xs
-
-debug x = trace x x
+    go acc current [] = reverse (if null current then acc else reverse current : acc)
+    go acc current (c : cs)
+      | all (== ' ') c =
+          let acc' = if null current then acc else reverse current : acc
+           in go acc' [] cs
+      | otherwise = go acc (c : current) cs
 
 parse2 :: String -> [Problem]
 parse2 txt =
   let rows = lines txt
-      operators = map parseOp $ words $ last rows
-      numbers =
-        map (map (read . filter (/= ' '))) $
-          split $
-            transpose $
-              init rows
-   in zipWith Problem operators (trace (show numbers) numbers)
+      ops = map parseOp . words $ last rows
+      columns = transpose (init rows)
+      numbers = map read <$> splitColumns columns
+   in zipWith Problem ops numbers
 
 part2 :: String -> Int
-part2 txt =
-  let problems = parse2 txt
-      solve = map $ \(Problem op is) -> foldl1 op is
-   in sum $ solve problems
+part2 = solve . parse2
