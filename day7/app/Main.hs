@@ -1,7 +1,5 @@
 module Main (main) where
 
-import Data.List (transpose)
-
 expect :: (Eq a, Show a, Applicative f) => a -> a -> f ()
 expect a b
   | a == b = pure ()
@@ -16,42 +14,51 @@ main = do
   expect (part2 test) 40
   print (part2 input)
 
-data Cell = Tachyon Int | Splitter Bool | Empty
+data Cell
+  = Tachyon Int
+  | Splitter Bool
+  | Empty
   deriving (Eq)
 
-parse txt =
-  -- Pad left and right with Empty so we can always rely on targetting a middle element
-  let rows = map ((\x -> Empty : x ++ [Empty]) . map parseTachyon) (lines txt)
-      parseTachyon 'S' = Tachyon 1
-      parseTachyon '^' = Splitter False
-      parseTachyon '.' = Empty
-   in rows
+parse :: String -> [[Cell]]
+parse = map (map toCell) . lines
+  where
+    toCell 'S' = Tachyon 1
+    toCell '^' = Splitter False
+    toCell '.' = Empty
+    toCell _ = Empty
 
-solve acc (x : y : xs) = solve (x : acc) (split [] (zip x y) : xs)
-solve acc xs = reverse acc ++ xs
+simulate :: [[Cell]] -> [[Cell]]
+simulate (top : cur : rest) = top : simulate (splitRow top cur : rest)
+simulate rows = rows
 
-split acc (a : b : c : xs) =
-  let left = case a of
-        (Tachyon n, Splitter _) -> n
-        _ -> 0
-      right = case c of
-        (Tachyon n, Splitter _) -> n
-        _ -> 0
-      b' = case b of
-        (Tachyon n, Splitter _) -> (Tachyon n, Splitter True)
-        (Tachyon n, Empty) -> (Tachyon n, Tachyon (n + left + right))
-        (Empty, Empty) -> (Empty, if left + right > 0 then Tachyon (left + right) else Empty)
-        x -> x
-   in split (snd a : acc) (b' : c : xs)
-split acc xs = reverse acc ++ map snd xs
+splitRow :: [Cell] -> [Cell] -> [Cell]
+splitRow top cur = map (snd . step) triples
+  where
+    zipped = zip top cur
+    padded = (Empty, Empty) : zipped ++ [(Empty, Empty)]
+    triples = zip3 padded (drop 1 padded) (drop 2 padded)
 
-part1 txt =
-  let rows = parse txt
-   in length $ concatMap (filter (== Splitter True)) (solve [] rows)
+    step (left, center, right) =
+      let leftBeam = case left of
+            (Tachyon n, Splitter _) -> n
+            _ -> 0
+          rightBeam = case right of
+            (Tachyon n, Splitter _) -> n
+            _ -> 0
+       in case center of
+            (Tachyon n, Splitter _) -> (Tachyon n, Splitter True)
+            (Tachyon n, Empty) -> (Tachyon n, Tachyon (n + leftBeam + rightBeam))
+            (Empty, Empty)
+              | leftBeam + rightBeam > 0 -> (Empty, Tachyon (leftBeam + rightBeam))
+              | otherwise -> (Empty, Empty)
+            x -> x
 
-part2 txt =
-  let rows = parse txt
-      count (Tachyon n) = n
-      count _ = 0
-      timelines = sum $ map count $ last (solve [] rows)
-   in timelines
+part1 :: String -> Int
+part1 = length . concatMap (filter (== Splitter True)) . simulate . parse
+
+part2 :: String -> Int
+part2 = sum . map count . last . simulate . parse
+  where
+    count (Tachyon n) = n
+    count _ = 0
