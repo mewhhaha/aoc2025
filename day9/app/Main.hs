@@ -36,9 +36,7 @@ size ((x1, y1), (x2, y2)) = (abs (x1 - x2) + 1) * (abs (y1 - y2) + 1)
 part1 txt =
   let coords = parse txt
       pairs = [(a, b) | (a : rest) <- tails coords, b <- rest]
-   in case listToMaybe $ sortBy (comparing Down) $ map size pairs of
-        Just x -> x
-        Nothing -> error "empty list"
+   in maximum $ map size pairs
 
 contains ((x1, y1), (x2, y2)) (a, b) =
   let left = min x1 x2
