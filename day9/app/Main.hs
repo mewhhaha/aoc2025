@@ -80,6 +80,4 @@ process = go []
 part2 txt =
   let coords = parse txt
       pairs = [(a, b) | (a : rest) <- tails coords, b <- rest]
-   in case listToMaybe $ sortBy (comparing Down) $ map size $ process pairs of
-        Just x -> x
-        Nothing -> error "empty list"
+   in maximum $ map size $ process pairs
