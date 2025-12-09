@@ -34,15 +34,6 @@ part1 txt =
       pairs = [(a, b) | (a : rest) <- tails coords, b <- rest]
    in maximum $ map size pairs
 
--- Build vertical edges (x, yLow, yHigh) from ordered polygon vertices.
-verticals :: [(Int, Int)] -> [(Int, Int, Int)]
-verticals coords =
-  [ (x1, min y1 y2, max y1 y2)
-  | (x1, y1) : rest <- tails coords,
-    (x2, y2) <- rest,
-    x1 == x2
-  ]
-
 -- Pair up sorted intersection xs into inclusive x-intervals.
 intervals :: [Int] -> [(Int, Int)]
 intervals (a : b : rest) = (min a b, max a b) : intervals rest
@@ -50,17 +41,7 @@ intervals _ = []
 
 part2 txt =
   let coords = parse txt
-      ys = sort (nub (map snd coords))
-      bands = [(y0, y1) | (y0 : y1 : _) <- tails ys, y1 > y0]
-      edges = verticals coords
-      bandersnatch =
-        [ (y0, y1, intervals (nub (sort [x | (x, lo, hi) <- edges, lo < y1 && hi > y0])))
-        | (y0, y1) <- bands,
-          y1 > y0
-        ]
-      covers ints l r = any (\(a, b) -> a <= l && b >= r) ints
-      inside (l, r, t, b) =
-        all (\(y0, y1, ints) -> not (y1 > t && y0 < b) || covers ints l r) bandersnatch
+
       pairs = [(a, b) | (a : rest) <- tails coords, b <- rest]
       rects =
         [ (l, r, t, b, size (_1, _2))
@@ -71,4 +52,20 @@ part2 txt =
           let b = max y1 y2,
           inside (l, r, t, b)
         ]
+
+      ys = nub (sort (map snd coords))
+      bands = [(y0, y1) | (y0 : y1 : _) <- tails ys, y1 > y0]
+      edges =
+        [ (x1, min y1 y2, max y1 y2)
+        | ((x1, y1), (x2, y2)) <- pairs,
+          x1 == x2
+        ]
+      bandersnatch =
+        [ (y0, y1, intervals (nub (sort [x | (x, lo, hi) <- edges, lo < y1 && hi > y0])))
+        | (y0, y1) <- bands,
+          y1 > y0
+        ]
+      covers ints l r = any (\(a, b) -> a <= l && b >= r) ints
+      inside (l, r, t, b) =
+        all (\(y0, y1, ints) -> not (y1 > t && y0 < b) || covers ints l r) bandersnatch
    in maximum (map (\(_, _, _, _, s) -> s) rects)
