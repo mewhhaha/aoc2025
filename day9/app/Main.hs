@@ -1,8 +1,7 @@
 module Main (main) where
 
-import Data.List (elemIndex, tails)
+import Data.List (elemIndex, nub, sort, tails)
 import Debug.Trace (trace)
-import Data.Bits (Bits(xor))
 
 expect :: (Eq a, Show a, Applicative f) => a -> a -> f ()
 expect a b
@@ -35,64 +34,41 @@ part1 txt =
       pairs = [(a, b) | (a : rest) <- tails coords, b <- rest]
    in maximum $ map size pairs
 
-inside :: [(Int, Int)] -> (Int, Int) -> Bool
-inside poly (px, py) =
-  let closed = poly ++ take 1 poly
-      onSegment (x1, y1) (x2, y2) =
-        let cross = (py - y1) * (x2 - x1) - (px - x1) * (y2 - y1)
-            withinX = px >= min x1 x2 && px <= max x1 x2
-            withinY = py >= min y1 y2 && py <= max y1 y2
-         in cross == 0 && withinX && withinY
-      crosses (x1, y1) (x2, y2) =
-        let cond = (y1 > py) /= (y2 > py)
-            xInt = x1 + (py - y1) * (x2 - x1) `div` (y2 - y1)
-         in cond && px < xInt
-      step acc (a : b : rest)
-        | onSegment a b = True
-        | otherwise = step (acc `xor` crosses a b) (b : rest)
-      step acc _ = acc
-   in step False closed
+-- Build vertical edges (x, yLow, yHigh) from ordered polygon vertices.
+verticals :: [(Int, Int)] -> [(Int, Int, Int)]
+verticals coords =
+  [ (x1, min y1 y2, max y1 y2)
+  | (x1, y1) : rest <- tails coords,
+    (x2, y2) <- rest,
+    x1 == x2
+  ]
 
-
-crosses :: [(Int, Int)] -> (Int, Int, Int, Int) -> Bool
-crosses poly (l, r, t, b) =
-  let closed = poly ++ take 1 poly
-      overlap a1 a2 b1 b2 =
-        let lo = max a1 b1
-            hi = min a2 b2
-         in hi - lo > 0
-      vertical (x1, y1) (x2, y2)
-        | x1 /= x2 = False
-        | otherwise =
-            let x = x1
-                yLow = min y1 y2
-                yHigh = max y1 y2
-             in x > l && x < r && overlap yLow yHigh t b
-      horizontal (x1, y1) (x2, y2)
-        | y1 /= y2 = False
-        | otherwise =
-            let y = y1
-                xLow = min x1 x2
-                xHigh = max x1 x2
-             in y > t && y < b && overlap xLow xHigh l r
-      go (a : b' : rest) = vertical a b' || horizontal a b' || go (b' : rest)
-      go _ = False
-   in go closed
-
-process :: [(Int, Int)] -> [((Int, Int), (Int, Int))] -> [((Int, Int), (Int, Int))]
-process poly = filter ok
-  where
-    ok pair@((x1, y1), (x2, y2))
-      | x1 == x2 || y1 == y2 = True
-      | otherwise =
-          let l = min x1 x2
-              r = max x1 x2
-              t = min y1 y2
-              b = max y1 y2
-           in all (inside poly) [(l,t), (r,t), (l,b), (r,b)]
-              && not (crosses poly (l, r, t, b))
+-- Pair up sorted intersection xs into inclusive x-intervals.
+intervals :: [Int] -> [(Int, Int)]
+intervals (a : b : rest) = (min a b, max a b) : intervals rest
+intervals _ = []
 
 part2 txt =
   let coords = parse txt
+      ys = sort (nub (map snd coords))
+      bands = [(y0, y1) | (y0 : y1 : _) <- tails ys, y1 > y0]
+      edges = verticals coords
+      bandersnatch =
+        [ (y0, y1, intervals (nub (sort [x | (x, lo, hi) <- edges, lo < y1 && hi > y0])))
+        | (y0, y1) <- bands,
+          y1 > y0
+        ]
+      covers ints l r = any (\(a, b) -> a <= l && b >= r) ints
+      inside (l, r, t, b) =
+        all (\(y0, y1, ints) -> not (y1 > t && y0 < b) || covers ints l r) bandersnatch
       pairs = [(a, b) | (a : rest) <- tails coords, b <- rest]
-   in maximum $ map size $ process coords pairs
+      rects =
+        [ (l, r, t, b, size (_1, _2))
+        | (_1@(x1, y1), _2@(x2, y2)) <- pairs,
+          let l = min x1 x2,
+          let r = max x1 x2,
+          let t = min y1 y2,
+          let b = max y1 y2,
+          inside (l, r, t, b)
+        ]
+   in maximum (map (\(_, _, _, _, s) -> s) rects)
