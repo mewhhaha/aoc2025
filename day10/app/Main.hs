@@ -1,13 +1,12 @@
 module Main (main) where
 
 import Data.List (elemIndex, find, nub, sort, sortBy, tails)
-import Data.Maybe (isNothing)
+import Data.Maybe (fromJust, fromMaybe, isNothing, listToMaybe, mapMaybe)
 import Data.Ord (comparing)
 import Debug.Trace (trace)
 
-expect :: (Eq a, Show a, Applicative f) => a -> a -> f ()
 expect a b
-  | a == b = pure ()
+  | a == b = print "Passed"
   | otherwise = error ("Expected " ++ show a ++ " to equal " ++ show b)
 
 debug x = trace (show x) x
@@ -18,7 +17,7 @@ main = do
   test <- readFile "./test1.txt"
   expect (part1 test) 7
   print (part1 input)
-  expect (part2 test) 24
+  expect (part2 test) 33
   print (part2 input)
 
 data Diagram = Diagram [Bool] [[Int]] [Int]
@@ -49,6 +48,20 @@ shortest (Diagram final l _) = go (map (\x -> (empty, [x])) l)
 
 part1 txt =
   let diagrams = parse txt
-   in sum $ debug $ map shortest diagrams
+   in sum $ map shortest diagrams
 
-part2 txt = 2
+solve (Diagram _ buttons jolts) =
+  let values = map (\button -> zipWith (\_ i -> fromEnum (i `elem` button)) jolts [0 ..]) buttons
+      sorted = sortBy (comparing (negate . sum)) values
+   in debug $ fromJust $ go 0 (map (const 0) jolts) sorted
+  where
+    go :: Int -> [Int] -> [[Int]] -> Maybe Int
+    go n current _ | current == jolts = Just n
+    go n current [] = Nothing
+    go n current (x : xs) =
+      let times = (fromMaybe 0 $ listToMaybe $ sort $ filter (> 0) $ zipWith (-) (zipWith (*) x jolts) current)
+       in listToMaybe $ mapMaybe (\t -> go (n + t) (zipWith (+) current (map (* t) x)) xs) [times, times - 1 .. 0]
+
+part2 txt =
+  let diagrams = parse txt
+   in sum $ map solve diagrams
